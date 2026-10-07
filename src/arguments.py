@@ -126,6 +126,9 @@ class TrainingArguments(TrainingArguments):
         metadata={"help": "List of split layers for student; number of elements equals number of projectors"}   
     )
     w_cross_modal_loss: float = field(default=1.0, metadata={"help": "weight for cross modal loss"})
+    
+    num_centroids: int = field(default=8, metadata={"help": "Number of centroids for distillation"})
+    centroid_hidden_size: int = field(default=896, metadata={"help": "Hidden size for centroids in distillation"})
 
     use_distill_loss: bool = field(default=True, metadata={"help": "Use distill loss"})
     use_distill_cse_loss: bool = field(default=True, metadata={"help": "Use distill cse loss"})
@@ -134,6 +137,10 @@ class TrainingArguments(TrainingArguments):
     sigreg_weight: float = field(default=0.05, metadata={"help": "weight for sigreg loss"})
     num_layers: int = field(default=1, metadata={"help": "Number of layers for sigreg"})
     d_cse_temperature: float = field(default=0.02, metadata={"help": "distill cse temperature for softmax"})
+    gmm_ckpt: str = field(default=None, metadata={"help": "GMM checkpoint path for distillation"})
+    num_t: int = field(default=33, metadata={"help": "Number of t for characteristic function"})
+    t_max: float = field(default=1.5, metadata={"help": "Maximum t for characteristic function"})
+    Ds: int = field(default=896, metadata={"help": "Hidden dimension for student model"})
 
 @dataclass
 class MTEBArguments:
