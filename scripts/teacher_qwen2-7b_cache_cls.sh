@@ -12,15 +12,14 @@ TRAIN_SCRIPT="teacher_cache.py"
 # )
 
 SUBSETS=(
-   "ImageNet_1K" 
-  #  "N24News" "HatefulMemes" "VOC2007" "SUN397"
-  # "OK-VQA" "A-OKVQA" "DocVQA" "InfographicsVQA" "ChartQA"
+   "ImageNet_1K" "N24News" "HatefulMemes" "VOC2007" "SUN397"
+  # "OK-VQA" "A-OKVQA" "DocVQA" "InfographicsVQA" "ChartQA" "Visual7W"
 )
 
 # =========================================================================
 # Dùng torchrun để khởi chạy
 # =========================================================================
-CUDA_VISIBLE_DEVICES=0 torchrun  --standalone \
+CUDA_VISIBLE_DEVICES=0 torchrun  --master_port=12346 \
     --nproc_per_node=$NUM_GPUS_PER_NODE \
     $TRAIN_SCRIPT \
     --model_name raghavlite/B3_Qwen2_7B \
@@ -34,7 +33,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun  --standalone \
     --dataset_split "original" \
     --image_dir "vlm2vec_train/MMEB-train" \
     --output_dir "caching/B3_Qwen2_7B_cls" \
-    --per_device_train_batch_size 1 \
+    --per_device_train_batch_size 4 \
     --image_resolution "mid" \
     --seed 42 \
     --normalize False \
