@@ -142,7 +142,6 @@ class TalasJepa(nn.Module):
 
         return sigreg_per_slice.mean()
 
-
     def sketched_participation_ratio_erank(self, z_list_first: list[torch.Tensor], 
                                            z_list_last: list[torch.Tensor],
                                            num_slices: int = 256, 
@@ -195,13 +194,6 @@ class TalasJepa(nn.Module):
             valid = lengths >= min_valid_tokens
             return pr, valid
 
-        # def _rms_norm(x, weight=None, eps=1e-8):
-        #     rms = torch.sqrt(x.pow(2).mean(dim=-1, keepdim=True) + eps)
-        #     out = x / rms
-        #     return out
-
-        # z0_normed = _rms_norm(z0_padded)
-        # zL_normed = _rms_norm(zL_padded)
         z0_normed = z0_padded
         zL_normed = zL_padded
 
@@ -212,27 +204,7 @@ class TalasJepa(nn.Module):
         if not valid.any():
             return zL_padded.sum() * 0.0
 
-        # print("pr0:", pr0)
-        # print("prL:", prL)
-        # def compute_effective_rank(
-        #     hidden_state: torch.Tensor, # [N, D]
-        #     eps: float = 1e-10,
-        # ) -> torch.Tensor:
-        #     X = hidden_state.float() 
-        #     N = X.size(0)
-        #     s = torch.linalg.svdvals(X) / torch.sqrt(torch.tensor(N))
-        #     eigvals = s * s
-        #     prob = eigvals.clamp(min=eps) / eigvals.sum()
-        #     entropy = -(prob * torch.log(prob)).sum()
-        #     effective_rank = torch.exp(entropy)
-        #     return effective_rank.to(dtype=hidden_state.dtype)
-        # for hs0, hsL in zip(z_list_first, z_list_last):
-        #     e0 = compute_effective_rank(hs0)
-        #     el = compute_effective_rank(hsL)
-        #     print(f"er_hs0: {e0}, er_hs1: {el}, 0-l: {e0-el}")
-
         loss_per_sample = F.relu(pr0 - prL)
-        # print("loss_per_sample:", loss_per_sample)
 
         return loss_per_sample[valid].mean().to(dtype)
     
@@ -391,7 +363,12 @@ class TalasJepa(nn.Module):
 
         batch_size = attention_mask.size(0)
         last_layer_idx = len(student_hidden_states) - 1
-        layers = [0, int(last_layer_idx / 2), int(4 * last_layer_idx / 5), last_layer_idx]
+
+        layer_mapping = self.args.student_layer_mapping
+        if 0 in layer_mapping and last_layer_idx in layer_mapping:
+            layers = layer_mapping
+        else:
+            layers = [0, int(last_layer_idx / 2), int(4 * last_layer_idx / 5), last_layer_idx]
         
         stu_img_tokens = {l: [] for l in layers}
         stu_text_reps = []
@@ -427,9 +404,7 @@ class TalasJepa(nn.Module):
         # 2. Gom representations của Vision và tính SIGReg
         stu_img_final_reps = None
         sigreg_final = 0.0
-
-        NUM_SLICES = 256
-
+        
         if len(stu_img_tokens[last_layer_idx]) > 0:
             stu_img_final_reps = torch.stack([x.mean(dim=0) for x in stu_img_tokens[last_layer_idx]], dim=0) 
 
@@ -438,6 +413,7 @@ class TalasJepa(nn.Module):
             sigreg_erank_loss = 0.0
 
             k_layers = 0
+            num_slides = self.args.num_layers
             for l in layers[1:-1]:
                 k_layers += 1
                 # eos_query = pooling(student_hidden_states[l], attention_mask, 
@@ -447,8 +423,8 @@ class TalasJepa(nn.Module):
                 # total_sigreg += self.sigreg_sinkhorn(stu_img_tokens[l], concept_queries)
 
                 sigreg_erank_loss += self.sketched_participation_ratio_erank(stu_img_tokens[0], 
-                                                                             stu_img_tokens[l],
-                                                                             num_slices=NUM_SLICES)
+                                                                             stu_img_tokens[l], 
+                                                                             num_slices=num_slides)
 
             if self.args.use_sigreg_loss:
                 sigreg_final = sigreg_erank_loss  / max(1, k_layers)
@@ -458,7 +434,7 @@ class TalasJepa(nn.Module):
     def forward(self, model_wrapper, input_data):
         student_model = model_wrapper.model
         student_processor = model_wrapper.get_processor()
-        student_tokenizer = student_processor.tokenizer 
+        student_tokenizer = student_processor.tokenizer
 
         student_qry_input = input_data['qry']
         student_pos_input = input_data['pos']
