@@ -152,6 +152,10 @@ def build_cache_obj(rep, inputs, hidden_states, processor, idx):
     image_mask_full = sample_ids.eq(image_token_id) & valid_mask
 
     token_mask_full = sample_ids.ne(image_token_id) & valid_mask
+    # Exclude the last valid (pooling) token from the text mean.
+    valid_positions = valid_mask.nonzero(as_tuple=True)[0]
+    if valid_positions.numel():
+        token_mask_full[valid_positions[-1]] = False
 
     last_hidden_state = hidden_states[-1][idx]
 
@@ -280,6 +284,7 @@ class TeacherCacheRunner:
             del qry_hidden_states
             del pos_hidden_states
             del batch
+            del qry_output, pos_output, _
             release_memory(self.device)
 
         progress_bar.close()
