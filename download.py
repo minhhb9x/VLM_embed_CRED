@@ -13,13 +13,13 @@ files = {
     "SUN397.zip": "images_zip/SUN397.zip",
     "HatefulMemes.zip": "images_zip/HatefulMemes.zip",
     "VOC2007.zip": "images_zip/VOC2007.zip",
-    "OK-VQA": "images_zip/OK-VQA.zip",
-    "A-OKVQA": "images_zip/A-OKVQA.zip",
-    "DocVQA": "images_zip/DocVQA.zip",
-    "InfographicsVQA": "images_zip/InfographicsVQA.zip",
-    "ChartQA": "images_zip/ChartQA.zip",
-    "Visual7W": "images_zip/Visual7W.zip",
-    "MSCOCO": "images_zip/MSCOCO.zip"
+    # "OK-VQA": "images_zip/OK-VQA.zip",
+    # "A-OKVQA": "images_zip/A-OKVQA.zip",
+    # "DocVQA": "images_zip/DocVQA.zip",
+    # "InfographicsVQA": "images_zip/InfographicsVQA.zip",
+    # "ChartQA": "images_zip/ChartQA.zip",
+    # "Visual7W": "images_zip/Visual7W.zip",
+    # "MSCOCO": "images_zip/MSCOCO.zip"
 }
 
 dataset = "TIGER-Lab/MMEB-train"

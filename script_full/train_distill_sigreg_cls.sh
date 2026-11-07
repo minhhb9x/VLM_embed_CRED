@@ -78,7 +78,8 @@ D_SIGREG=$(bool_to_int "$USE_SIGREG_LOSS")
 
 EXP_NAME="talas_jepa_v2_d${D_DISTILL}_cse${D_CSE}_vis${D_VISION}_sig${D_SIGREG}_kd${KD_WEIGHT}_sw${SIGREG_WEIGHT}_l${NUM_LAYER}_dt${D_TAU}"
 
-OUTPUT_DIR="training/FastVLM-0.5B_cls_${EXP_NAME}_M512"
+PREFIX=FastVLM-0.5B_cls
+OUTPUT_DIR="training/${PREFIX}_${EXP_NAME}"
 CACHE_DIR="caching/B3_Qwen2_2B_cls"
 
 echo "============================================================"
@@ -105,14 +106,9 @@ TRAIN_SCRIPT="train_ddp.py"
 torchrun --standalone \
     --nproc_per_node=$NUM_GPUS_PER_NODE $TRAIN_SCRIPT \
     --model_name apple/FastVLM-0.5B \
-    --teacher_model_name "raghavlite/B3_Qwen2_2B" \
     --lora True \
-    --teacher_lora True \
     --lora_r 64 \
     --lora_alpha 64 \
-    --teacher_lora_r 8 \
-    --teacher_pooling "eos" \
-    --teacher_backbone "qwen2_vl" \
     --model_backbone "llava_qwen2" \
     --pooling "eos" \
     --dataset_name "TIGER-Lab/MMEB-train" \
@@ -189,7 +185,7 @@ SUBSETS=(
     "Country211"
 )
 
-EVAL_OUTPUT="./MMEB-eval_outputs/FastVLM-0.5B_cls_${EXP_NAME}_M512/"
+EVAL_OUTPUT="./MMEB-eval_outputs/${PREFIX}_${EXP_NAME}/"
 
 python eval_mmeb.py \
     --model_name "$MODEL" \

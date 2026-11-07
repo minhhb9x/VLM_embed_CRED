@@ -1,0 +1,11 @@
+CUDA_VISIBLE_DEVICES=0 python calculate_eval_pr.py \
+    --model_name /home/hungpv/projects/VLM_Embed_Gvendi/training/B3-Qwen2-2B_FastVLM-0.5B_pga+mse_cls/checkpoint-epoch-0 \
+    --lora True \
+    --model_backbone llava_qwen2 \
+    --dataset_name TIGER-Lab/MMEB-eval \
+    --dataset_split test \
+    --subset_name ImageNet-1K \
+    --image_dir eval_images \
+    --tgt_prefix_mod \
+    --batch_size 4 \
+    --output_dir ER_outputs/B3-Qwen2-2B_FastVLM-0.5B_pga+mse_cls 
