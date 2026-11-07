@@ -21,7 +21,7 @@ USE_DISTILL_VISON_LOSS=${3:-True}
 USE_SIGREG_LOSS=${4:-True}
 KD_WEIGHT=${5:-1.0}
 SIGREG_WEIGHT=${6:-0.05}
-NUM_LAYER=${7:-1}
+NUM_LAYER=${7:-256}
 D_TAU=${8:-0.02}
 
 # ============================================================

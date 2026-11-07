@@ -142,6 +142,11 @@ class TrainingArguments(TrainingArguments):
     t_max: float = field(default=1.5, metadata={"help": "Maximum t for characteristic function"})
     Ds: int = field(default=896, metadata={"help": "Hidden dimension for student model"})
 
+    cpr_layers: List[int] = field(default_factory=list)
+    cpr_reference_layer: int = field(default=0)
+    cpr_threshold: Optional[float] = field(default=None)
+    cpr_statistic: str = field(default="pr", metadata={"choices": ["pr", "erank"]})
+
 @dataclass
 class MTEBArguments:
     device: str = field(default="cuda", metadata={"help": "use cuda for single GPU inference, if multiple GPUs are available it will use DP automatically"})
