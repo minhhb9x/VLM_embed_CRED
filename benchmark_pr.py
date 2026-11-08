@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmark centered token PR using a sketch, an exact Gram matrix, and SVD.
+"""Benchmark centered token PR and Shannon eRank.
 
 Requires PyTorch. Example:
   python benchmark_pr.py --device cuda --hidden-dim 896 --output pr_forward.csv
@@ -11,9 +11,12 @@ FP32 conversion, and sketch generation are included in measurements.
 The full batch is processed together. Reported times and memory are means
 over measurements divided by B. Memory is the mean of per-trial peaks,
 amortized over the batch. Relative errors are averaged over individual samples.
-Forward measures a per-image PR vector. Backward measures mean(PR).backward()
+Forward measures a per-image statistic vector. Backward measures its mean.backward()
 through the input tokens. This isolates the statistic, rather than measuring
 the full CPR hinge with a detached reference, padding, or model inference.
+Shannon eRank uses squared singular values of centered tokens, as in
+AblationCred: exp(-sum(p * log(p))). It is not divided by min(N, D).
+Each method's error is measured against its own statistic's FP64 reference.
 """
 
 import argparse
@@ -78,6 +81,17 @@ def svd_pr(tokens, driver="gesvd", eps=1e-8):
     ).clamp_min(eps)
 
 
+def shannon_erank(tokens, driver="gesvd", eps=1e-8):
+    """Absolute Shannon eRank of each sample's centered covariance spectrum."""
+    centered = centered_tokens(tokens)
+    kwargs = {"driver": driver} if tokens.is_cuda else {}
+    eigenvalues = torch.linalg.svdvals(centered, **kwargs).square()
+    total = eigenvalues.sum(dim=-1, keepdim=True)
+    probabilities = eigenvalues / total.clamp_min(eps)
+    entropy = -(probabilities * probabilities.clamp_min(eps).log()).sum(dim=-1)
+    return torch.where(total.squeeze(-1) > 0, entropy.exp(), 0.0)
+
+
 def reference_pr(tokens):
     """FP64 exact-PR reference, evaluated outside the benchmark."""
     centered = tokens.double()
@@ -89,6 +103,22 @@ def reference_pr(tokens):
         gram = centered.transpose(1, 2) @ centered
     trace = gram.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
     return trace.square() / gram.square().sum(dim=(-2, -1))
+
+
+def reference_erank(tokens, eps=1e-8):
+    """FP64 Gram eigendecomposition reference, outside the benchmark."""
+    centered = tokens.double()
+    centered = centered - centered.mean(dim=1, keepdim=True)
+    token_count, hidden_dim = centered.shape[-2:]
+    if token_count <= hidden_dim:
+        gram = centered @ centered.transpose(1, 2)
+    else:
+        gram = centered.transpose(1, 2) @ centered
+    eigenvalues = torch.linalg.eigvalsh(gram).clamp_min(0)
+    total = eigenvalues.sum(dim=-1, keepdim=True)
+    probabilities = eigenvalues / total.clamp_min(eps)
+    entropy = -(probabilities * probabilities.clamp_min(eps).log()).sum(dim=-1)
+    return torch.where(total.squeeze(-1) > 0, entropy.exp(), 0.0)
 
 
 def make_tokens(args, token_count, seed):
@@ -193,6 +223,7 @@ def main():
         "Matrix-free PR": lambda x: matrix_free_pr(x, args.projections),
         "Exact PR": exact_pr,
         "Exact SVD PR": lambda x: svd_pr(x, args.svd_driver),
+        "Shannon eRank": lambda x: shannon_erank(x, args.svd_driver),
     }
     metadata = {
         "torch": torch.__version__,
@@ -204,7 +235,10 @@ def main():
                      else value for key, value in vars(args).items()},
         "input_distribution": "independent standard Gaussian entries",
         "compute_dtype": "float32",
-        "reference": "float64 exact PR on the same quantized input",
+        "reference": "Same quantized input in float64: exact PR for PR methods; "
+                     "Gram eigendecomposition Shannon eRank for Shannon eRank.",
+        "shannon_erank": "Centered covariance spectrum, per sample, squared "
+                         "singular values; absolute eRank without rank normalization.",
         "timing": "Mean full-batch runtime divided by B, in ms/sample. "
                   "Centering and fresh projection generation included; model excluded.",
         "memory": "Mean across trials, divided by B, in MiB/sample. Extra peak is "
@@ -212,9 +246,11 @@ def main():
                   "These are amortized batch memory measurements. "
                   "Includes input gradients in backward mode. External CUDA/library "
                   "allocations and reserved allocator cache are not measured.",
-        "error": "Mean per-sample relative PR error across batch elements, "
-                 "trials, and projection draws, in percent.",
-        "backward_objective": "mean(PR), excluding CPR reference and hinge",
+        "error": "Mean per-sample relative error against the matching statistic's "
+                 "float64 reference, across batch elements, trials, and projection "
+                 "draws, in percent. Shannon eRank is not compared against PR.",
+        "backward_objective": "mean(PR) or mean(Shannon eRank), "
+                              "excluding CPR reference and hinge",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.with_suffix(".metadata.json").write_text(
@@ -239,7 +275,7 @@ def main():
                 seed = args.seed + trial
                 tokens = make_tokens(args, token_count, seed)
                 with torch.no_grad():
-                    reference = reference_pr(tokens).cpu()
+                    pr_reference = reference_pr(tokens).cpu()
                 names = list(methods)
                 offset = trial % len(names)
                 names = names[offset:] + names[:offset]
@@ -248,6 +284,10 @@ def main():
                     if record["status"] != "ok":
                         continue
                     try:
+                        # Keep reference computation outside timing/memory measurements.
+                        with torch.no_grad():
+                            reference = (reference_erank(tokens).cpu()
+                                         if name == "Shannon eRank" else pr_reference)
                         torch.manual_seed(seed + 10000)
                         wall, cuda, baseline, peak = measure(
                             methods[name], tokens, args
@@ -263,7 +303,7 @@ def main():
                                 value = methods[name](tokens).double().cpu()
                                 if not torch.isfinite(value).all():
                                     raise RuntimeError(
-                                        f"Non-finite PR from {name}, "
+                                        f"Non-finite statistic from {name}, "
                                         f"N={token_count}"
                                     )
                                 error = (value - reference).abs() / reference

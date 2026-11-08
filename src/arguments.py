@@ -145,7 +145,11 @@ class TrainingArguments(TrainingArguments):
     cpr_layers: List[int] = field(default_factory=list)
     cpr_reference_layer: int = field(default=0)
     cpr_threshold: Optional[float] = field(default=None)
-    cpr_statistic: str = field(default="pr", metadata={"choices": ["pr", "erank"]})
+    cpr_statistic: str = field(default="pr", metadata={"choices": ['pr', 'erank', 'var_cov']})
+
+    cpr_var_target: float = field(default=1.0)
+    cpr_var_weight: float = field(default=25.0)
+    cpr_cov_weight: float = field(default=1.0)
 
 @dataclass
 class MTEBArguments:

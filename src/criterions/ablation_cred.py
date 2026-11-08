@@ -25,12 +25,22 @@ class AblationCred(nn.Module):
 
         self.cpr_statistic = getattr(args, "cpr_statistic", "pr")
         self.cpr_threshold = getattr(args, "cpr_threshold", None)
-        if self.cpr_statistic not in ("pr", "erank"):
-            raise ValueError("cpr_statistic must be pr or erank.")
+        if self.cpr_statistic not in ("pr", "erank", "var_cov"):
+            raise ValueError("cpr_statistic must be pr, erank, or var_cov.")
         if self.cpr_threshold is not None and (
             not math.isfinite(self.cpr_threshold) or self.cpr_threshold < 0
         ):
             raise ValueError("cpr_threshold must be finite and nonnegative.")
+        self.cpr_var_target = getattr(args, "cpr_var_target", 1.0)
+        self.cpr_var_weight = getattr(args, "cpr_var_weight", 25.0)
+        self.cpr_cov_weight = getattr(args, "cpr_cov_weight", 1.0)
+        if self.cpr_statistic == "var_cov":
+            if self.cpr_threshold is not None:
+                raise ValueError("var_cov uses cpr_var_target, not cpr_threshold; omit cpr_threshold.")
+            if any(not math.isfinite(x) or x < 0 for x in (
+                self.cpr_var_target, self.cpr_var_weight, self.cpr_cov_weight
+            )):
+                raise ValueError("Variance target and variance/covariance weights must be finite and nonnegative.")
 
     def _dist_gather_tensor(self, t: torch.Tensor):
         t = t.contiguous()
@@ -89,6 +99,29 @@ class AblationCred(nn.Module):
 
         return F.kl_div(student_log_probs, teacher_probs, reduction="batchmean",)
 
+    def variance_covariance_loss(self, z_list, min_valid_tokens=4, eps=1e-4):
+        """VICReg-style V+C, adapted to tokens within each image (not across images)."""
+        if not z_list:
+            return 0.0
+        device, dtype = z_list[0].device, z_list[0].dtype
+        with torch.autocast(device_type=device.type, enabled=False):
+            lengths = torch.tensor([z.size(0) for z in z_list], device=device)
+            z = pad_sequence(z_list, batch_first=True).float()
+            valid = lengths >= min_valid_tokens
+            if not valid.any():
+                return z.sum() * 0.0
+            mask = (torch.arange(z.size(1), device=device)[None, :] < lengths[:, None])
+            mask = mask.unsqueeze(-1).float()
+            mean = (z * mask).sum(dim=1, keepdim=True) / lengths.clamp_min(1)[:, None, None]
+            centered = (z - mean) * mask
+            covariance = (centered.transpose(1, 2) @ centered) / (lengths - 1).clamp_min(1)[:, None, None]
+            variance = covariance.diagonal(dim1=-2, dim2=-1)
+            var_loss = F.relu(self.cpr_var_target - (variance + eps).sqrt()).mean(dim=-1)
+            off_diagonal = covariance - torch.diag_embed(variance)
+            cov_loss = off_diagonal.square().sum(dim=(-2, -1)) / z.size(-1)
+            loss = self.cpr_var_weight * var_loss + self.cpr_cov_weight * cov_loss
+            return loss[valid].mean().to(dtype)
+
     def sketched_participation_ratio_erank(self, z_list_first: list[torch.Tensor],
                                            z_list_last: list[torch.Tensor],
                                            num_slices: int = 256,
@@ -97,6 +130,9 @@ class AblationCred(nn.Module):
         B = len(z_list_last)
         if B == 0:
             return 0.0
+
+        if self.cpr_statistic == "var_cov":
+            return self.variance_covariance_loss(z_list_last, min_valid_tokens)
 
         device, dtype = z_list_last[0].device, z_list_last[0].dtype
         D = z_list_last[0].shape[-1]

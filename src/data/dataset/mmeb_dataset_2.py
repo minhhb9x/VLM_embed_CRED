@@ -302,6 +302,8 @@ class EvalDataset(Dataset):
 
     def __getitem__(self, item):
         text, img_path = self.paired_dataset[item]["text"], self.paired_dataset[item]["img_path"]
+        if not img_path:
+            text = (text.replace("<|image_1|>", "").replace("<image>", "").strip())
         if self.backbone != PHI3V:
             text = text.replace(VLM_IMAGE_TOKENS[PHI3V], VLM_IMAGE_TOKENS[self.backbone])
         # if(self.backbone==INTERN_VL3):
