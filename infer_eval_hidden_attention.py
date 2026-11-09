@@ -271,7 +271,7 @@ def slice_hidden_states(hidden_states, local_idx, token_slice):
     return torch.stack(
         [
             hidden_state[local_idx, token_slice, :].detach().cpu().float()
-            for hidden_state in hidden_states[1:]
+            for hidden_state in hidden_states[:]
             if hidden_state is not None
         ],
         dim=0,

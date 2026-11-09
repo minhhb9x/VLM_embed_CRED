@@ -16,13 +16,13 @@ INFER_SUBSETS=(
 )
 
 MODELS=(
-    # "raghavlite/B3_Qwen2_2B"
+    "raghavlite/B3_Qwen2_2B"
     # "apple/FastVLM-0.5B"
-    training1/FastVLM-0.5B_base_b16_cls/checkpoint-epoch-0
-    # "meta_train/rkd_meta_cls/checkpoint-epoch-0"
-    # "meta_train/ckd_meta_cls/checkpoint-epoch-0"
-    # "meta_train/norm_meta_cls/checkpoint-epoch-0"
-    # meta_train/rebuttal_hierd_cls_5layers
+    # training1/FastVLM-0.5B_base_b16_cls/checkpoint-epoch-0
+    "meta_train/rkd_meta_cls/checkpoint-epoch-0"
+    "meta_train/ckd_meta_cls/checkpoint-epoch-0"
+    "meta_train/norm_meta_cls/checkpoint-epoch-0"
+    meta_train/rebuttal_hierd_cls_5layers/checkpoint-epoch-0
     # "meta_train/sft_meta_llavaov_cls/checkpoint-epoch-0"
     # "meta_train/rkd_meta_llavaov_cls/checkpoint-epoch-0"
     # "meta_train/ckd_meta_llavaov_cls/checkpoint-epoch-0"
@@ -31,13 +31,13 @@ MODELS=(
 )
 
 BACKBONES=(
-    # "qwen2_vl"
+    "qwen2_vl"
+    # "llava_qwen2_old"
     # "llava_qwen2_old"
     "llava_qwen2_old"
-    # "llava_qwen2"
-    # "llava_qwen2"
-    # "llava_qwen2_old"
-    # "llava_qwen2_old"
+    "llava_qwen2_old"
+    "llava_qwen2_old"
+    "llava_qwen2_old"
     # "llava_onevision"
     # "llava_onevision"
     # "llava_onevision_old"

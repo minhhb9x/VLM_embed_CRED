@@ -39,7 +39,7 @@ def _stack_valid_hidden_states(hidden_states, sample_idx, valid_mask):
     """Return decoder layers as [num_layers, num_valid_tokens, hidden_dim]."""
     layers = [
         layer[sample_idx, valid_mask, :].detach().cpu().float()
-        for layer in hidden_states[1:]
+        for layer in hidden_states[:]
         if layer is not None
     ]
     if not layers:
