@@ -505,7 +505,7 @@ def infer_side(
     special_ids = get_special_ids_for_text_count(tokenizer)
     special_ids_tensor = torch.tensor(sorted(special_ids), device=device, dtype=torch.long)
 
-    MAX_INFER_BATCHES = 150
+    MAX_INFER_BATCHES = 50
 
     with torch.no_grad():
         for batch_idx, (sample_indices, batch) in enumerate(
