@@ -16,32 +16,33 @@ INFER_SUBSETS=(
 )
 
 MODELS=(
-    "raghavlite/B3_Qwen2_2B"
+    # "raghavlite/B3_Qwen2_2B"
     # "apple/FastVLM-0.5B"
     # training1/FastVLM-0.5B_base_b16_cls/checkpoint-epoch-0
-    "meta_train/rkd_meta_cls/checkpoint-epoch-0"
-    "meta_train/ckd_meta_cls/checkpoint-epoch-0"
-    "meta_train/norm_meta_cls/checkpoint-epoch-0"
-    meta_train/rebuttal_hierd_cls_5layers/checkpoint-epoch-0
-    # "meta_train/sft_meta_llavaov_cls/checkpoint-epoch-0"
-    # "meta_train/rkd_meta_llavaov_cls/checkpoint-epoch-0"
-    # "meta_train/ckd_meta_llavaov_cls/checkpoint-epoch-0"
+    # "meta_train/rkd_meta_cls/checkpoint-epoch-0"
+    # "meta_train/ckd_meta_cls/checkpoint-epoch-0"
+    # "meta_train/norm_meta_cls/checkpoint-epoch-0"
+    # meta_train/rebuttal_hierd_cls_5layers/checkpoint-epoch-0
+    "meta_train/sft_meta_llavaov_cls/checkpoint-epoch-0"
+    "meta_train/rkd_meta_llavaov_cls/checkpoint-epoch-0"
+    "meta_train/ckd_meta_llavaov_cls/checkpoint-epoch-0"
     # "meta_train/norm_meta_llavaov_cls/checkpoint-epoch-0"
-    # "meta_train/span_propose_llava_ov_cls_v3_final/checkpoint-epoch-0"
+    "meta_train/span_propose_llava_ov_cls_v3_final/checkpoint-epoch-0"
 )
 
 BACKBONES=(
-    "qwen2_vl"
+    # "qwen2_vl"
     # "llava_qwen2_old"
     # "llava_qwen2_old"
-    "llava_qwen2_old"
-    "llava_qwen2_old"
-    "llava_qwen2_old"
-    "llava_qwen2_old"
-    # "llava_onevision"
-    # "llava_onevision"
+    # "llava_qwen2_old"
+    # "llava_qwen2_old"
+    # "llava_qwen2_old"
+    # "llava_qwen2_old"
+    "llava_onevision_old"
+    "llava_onevision_old"
+    "llava_onevision_old"
     # "llava_onevision_old"
-    # "llava_onevision_old"
+    "llava_onevision_old"
 )
 
 # Kiểm tra MODELS và BACKBONES có cùng số phần tử không
@@ -110,5 +111,6 @@ for i in "${!MODELS[@]}"; do
             --normalize_by_min_dim \
             --output_file "${ANALYZE_BASE}_centered.txt"
     done
+    rm -rf "$INFER_OUTPUT"
     echo "Finished: ${EXP_NAME}${OUTPUT_SUFFIX}"
 done
