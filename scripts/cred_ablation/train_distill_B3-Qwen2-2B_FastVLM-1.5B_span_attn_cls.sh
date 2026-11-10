@@ -51,7 +51,7 @@ torchrun --standalone \
     --kd_loss_type "span_propose_attn" \
     --image_resolution "low" \
     --teacher_layer_mapping 0 22 25 28 \
-    --student_layer_mapping 0 18 21 24 \
+    --student_layer_mapping 0 22 25 28 \
     --split_layer_mapping 0 1 4 4 4 \
     --projector_lr 5e-4 \
     --student_hidden_dim 1536 \

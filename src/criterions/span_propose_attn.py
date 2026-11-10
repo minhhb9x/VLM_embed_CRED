@@ -10,7 +10,7 @@ import hdbscan
 import spacy
 from spacy.matcher import Matcher
 from sklearn.cluster import DBSCAN
-
+from src.model.llava.constants import IMAGE_TOKEN_INDEX
 
 # ====== Text Processing Functions ======
 
@@ -1071,7 +1071,19 @@ def compute_cross_modal_alignment_loss_weighted(projectors,
         total_loss = total_loss / num_valid_layers
     
     return total_loss
-                                       
+
+
+def align_image_features(features, has_image):
+    features = [] if features is None else features
+
+    if len(features) != sum(has_image):
+        raise ValueError(
+            f"Expected {sum(has_image)} images, got {len(features)} features"
+        )
+
+    image_iter = iter(features)
+    return [next(image_iter) if flag else None for flag in has_image]
+
 class SpanProposeCriterionWeighted(nn.Module):
     def __init__(self, args):
         super(SpanProposeCriterionWeighted, self).__init__()
@@ -1148,7 +1160,16 @@ class SpanProposeCriterionWeighted(nn.Module):
         student_pos_output = student_model.encode_input(student_pos_input)
         student_qry_reps, student_qry_image_features, student_qry_attention, student_qry_hidden_states = student_qry_output
         student_pos_reps, student_pos_image_features, student_pos_attention, student_pos_hidden_states = student_pos_output
-    
+
+        qry_has_image = (student_qry_input["input_ids"] == IMAGE_TOKEN_INDEX).any(dim=1).tolist()
+
+        pos_has_image = (student_pos_input["input_ids"] == IMAGE_TOKEN_INDEX).any(dim=1).tolist()
+
+        student_qry_image_features = align_image_features(student_qry_image_features, qry_has_image)
+        teacher_qry_image_features = align_image_features(teacher_qry_image_features, qry_has_image)
+        student_pos_image_features = align_image_features(student_pos_image_features, pos_has_image)
+        teacher_pos_image_features = align_image_features(teacher_pos_image_features, pos_has_image)
+
         # Contrastive loss
         if self.world_size > 1:
             all_student_qry_reps = self._dist_gather_tensor(student_qry_reps)
