@@ -58,6 +58,11 @@ torchrun --standalone \
     --teacher_hidden_dim 1536 \
     --sigreg_weight 0.5
 
+# --teacher_layer_mapping 28 \
+# --student_layer_mapping 24 \
+# --split_layer_mapping 0 0 1 \
+# --w_cross_modal_loss 0 \
+
 
 EVAL_SUBSETS=(
     VisDial CIRR

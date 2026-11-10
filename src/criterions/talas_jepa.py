@@ -8,6 +8,64 @@ import math
 from torch.nn.utils.rnn import pad_sequence
 
 
+def fastvlm_token_masks(inputs, image_features, hidden_len, special_ids, config):
+    """Rebuild the token layout for FastVLM inputs with zero or one image."""
+    input_ids, input_mask = inputs["input_ids"], inputs["attention_mask"].bool()
+    image_counts = ((input_ids == -200) & input_mask).sum(dim=1).tolist()
+    if any(n > 1 for n in image_counts):
+        raise ValueError("This JEPA helper supports at most one image per input.")
+    has_image = [n == 1 for n in image_counts]
+    features = [] if image_features is None else list(image_features)
+    if len(features) != len(has_image):
+        if len(features) != sum(has_image):
+            raise ValueError("Image feature count does not match image placeholders.")
+        image_iter = iter(features)
+        features = [next(image_iter) if flag else None for flag in has_image]
+    if any((feat is not None) != flag for feat, flag in zip(features, has_image)):
+        raise ValueError("Image features are not aligned with input samples.")
+
+    rows = []
+    max_len = getattr(config, "tokenizer_model_max_length", None)
+    for i, feat in enumerate(features):
+        ids = input_ids[i][input_mask[i]]
+        # 0: special token, 1: clean text (including EOS), 2: image.
+        kinds = ((ids >= 0) & ~torch.isin(ids, special_ids)).long()
+        repeats = torch.ones_like(ids)
+        image_positions = ids == -200
+        if feat is not None:
+            kinds[image_positions] = 2
+            repeats[image_positions] = feat.size(0)
+        kinds = torch.repeat_interleave(kinds, repeats)
+        if max_len is not None:
+            kinds = kinds[:max_len]
+        rows.append(kinds)
+    if not rows or max(row.numel() for row in rows) != hidden_len:
+        raise ValueError("Reconstructed token layout does not match FastVLM hidden states.")
+
+    left_padding = getattr(config, "tokenizer_padding_side", "right") == "left"
+    layout = torch.stack([
+        F.pad(row, (hidden_len - row.numel(), 0) if left_padding
+              else (0, hidden_len - row.numel()), value=-1)
+        for row in rows
+    ])
+    return features, layout >= 0, layout == 1, layout == 2
+
+
+def matched_cached_modality(student_reps, caches, key, sample_indices):
+    """Select identical sample rows from student reps and optional cached reps."""
+    if student_reps is None:
+        return None, None
+    pairs = [(row, caches[i].get(key)) for row, i in enumerate(sample_indices)
+             if caches[i].get(key) is not None]
+    if not pairs:
+        return None, None
+    rows, teacher_reps = zip(*pairs)
+    return student_reps[list(rows)], torch.stack(teacher_reps).to(
+        device=student_reps.device, dtype=student_reps.dtype
+    )
+
+
+
 class TalasJepa(nn.Module):
     def __init__(self, args):
         super(TalasJepa, self).__init__()
@@ -355,7 +413,7 @@ class TalasJepa(nn.Module):
         return loss_sigreg.mean()
 
     def _compute_modality_distill(self, student_hidden_states, image_features, 
-                                  text_token_counts, attention_mask):
+                                  text_token_counts, attention_mask, text_mask=None, image_mask=None):
         """
         Hàm này chỉ còn nhiệm vụ trích xuất text và vision representations 
         của student, cùng với việc tính toán SIGReg loss.
@@ -375,27 +433,32 @@ class TalasJepa(nn.Module):
         
         cur_idx_img = 0
         for i in range(batch_size):
-            num_vision_token = 0
-            if image_features is not None and cur_idx_img < len(image_features):
-                num_vision_token = image_features[cur_idx_img].size(0)
-                cur_idx_img += 1
-            
-            text_last_hidden, img_last_hidden = get_hidden_text_vision(
-                student_hidden_states[last_layer_idx][i],
-                text_token_counts[i].item(),
-                num_vision_token,
-                attention_mask[i]
+            if image_mask is not None:
+                text_last_hidden = student_hidden_states[last_layer_idx][i][text_mask[i]]
+                num_vision_token = int(image_mask[i].sum().item())
+            else:
+                num_vision_token = 0
+                if image_features is not None and cur_idx_img < len(image_features):
+                    num_vision_token = image_features[cur_idx_img].size(0)
+                    cur_idx_img += 1
+                text_last_hidden, _ = get_hidden_text_vision(
+                    student_hidden_states[last_layer_idx][i],
+                    text_token_counts[i].item(), num_vision_token, attention_mask[i]
+                )
+            stu_text_reps.append(
+                text_last_hidden.mean(dim=0) if text_last_hidden.size(0)
+                else student_hidden_states[last_layer_idx][i].sum(dim=0) * 0.0
             )
-            stu_text_reps.append(text_last_hidden.mean(dim=0))
-            
+
             if num_vision_token > 0:
                 for l in layers:
-                    _, img_hidden = get_hidden_text_vision(
-                        student_hidden_states[l][i],
-                        text_token_counts[i].item(),
-                        num_vision_token,
-                        attention_mask[i]
-                    )
+                    if image_mask is not None:
+                        img_hidden = student_hidden_states[l][i][image_mask[i]]
+                    else:
+                        _, img_hidden = get_hidden_text_vision(
+                            student_hidden_states[l][i], text_token_counts[i].item(),
+                            num_vision_token, attention_mask[i]
+                        )
                     stu_img_tokens[l].append(img_hidden)
 
         # 1. Gom representations của Text
@@ -450,17 +513,36 @@ class TalasJepa(nn.Module):
         device = student_qry_reps.device
         dtype = student_qry_reps.dtype
 
+        student_special_ids = torch.tensor(
+            list(set(list(student_tokenizer.added_tokens_encoder.values()) + student_tokenizer.all_special_ids)
+                 - set([student_tokenizer.eos_token_id])),
+            device=student_qry_input['input_ids'].device,
+            dtype=torch.long
+        )
+
+        # FastVLM expands image placeholders, changing lengths and padding.
+        qry_mask, pos_mask = student_qry_input['attention_mask'], student_pos_input['attention_mask']
+        qry_text_mask = pos_text_mask = qry_image_mask = pos_image_mask = None
+        if getattr(student_model, "model_backbone", None) in ["llava_qwen2", "llava_qwen2_old"]:
+            student_qry_image_features, qry_mask, qry_text_mask, qry_image_mask = fastvlm_token_masks(
+                student_qry_input, student_qry_image_features,
+                student_qry_hidden_states[-1].size(1), student_special_ids, student_model.config
+            )
+            student_pos_image_features, pos_mask, pos_text_mask, pos_image_mask = fastvlm_token_masks(
+                student_pos_input, student_pos_image_features,
+                student_pos_hidden_states[-1].size(1), student_special_ids, student_model.config
+            )
+            student_qry_reps = pooling(student_qry_hidden_states[-1], qry_mask,
+                                       mode='eos', normalize=student_model.normalize)
+            student_pos_reps = pooling(student_pos_hidden_states[-1], pos_mask,
+                                       mode='eos', normalize=student_model.normalize)
+
+
         teacher_qry, teacher_pos = input_data["teacher_qry_caches"], input_data["teacher_pos_caches"]
 
         teacher_qry_reps = torch.stack([rep['rep'] for rep in teacher_qry], dim=0).to(device, dtype=dtype)
         teacher_pos_reps = torch.stack([rep['rep'] for rep in teacher_pos], dim=0).to(device, dtype=dtype)
 
-        tea_img_qry_reps = torch.stack([rep['mean_last_img_token'] for rep in teacher_qry], dim=0).to(device, dtype=dtype) if teacher_qry[0]['mean_last_img_token'] is not None else None
-        tea_img_pos_reps = torch.stack([rep['mean_last_img_token'] for rep in teacher_pos], dim=0).to(device, dtype=dtype) if teacher_pos[0]['mean_last_img_token'] is not None else None
-
-        tea_text_qry_reps = torch.stack([rep['mean_last_text_token'] for rep in teacher_qry], dim=0).to(device, dtype=dtype) if teacher_qry[0]['mean_last_text_token'] is not None else None
-        tea_text_pos_reps = torch.stack([rep['mean_last_text_token'] for rep in teacher_pos], dim=0).to(device, dtype=dtype) if teacher_pos[0]['mean_last_text_token'] is not None else None
-        
         if getattr(self, 'world_size', 1) > 1:
             all_student_qry_reps = self._dist_gather_tensor(student_qry_reps)
             all_student_pos_reps = self._dist_gather_tensor(student_pos_reps)
@@ -480,10 +562,10 @@ class TalasJepa(nn.Module):
 
         kd_simcse = 0.0
         last_stu_qry_hidden_state = pooling(student_qry_hidden_states[-1], 
-                                            student_qry_input['attention_mask'], 
+                                            qry_mask,
                                             mode='eos', normalize=True)
         last_stu_pos_hidden_state = pooling(student_pos_hidden_states[-1], 
-                                            student_pos_input['attention_mask'], 
+                                            pos_mask,
                                             mode='eos', normalize=True)
         
         kd_simcse += self.distillcse_kd_loss(last_stu_qry_hidden_state, 
@@ -496,13 +578,6 @@ class TalasJepa(nn.Module):
         # kd_simcse += self.structure_loss(all_stu_reps, all_tea_reps) / self.args.d_cse_temperature
 
         ##################################
-        student_special_ids = torch.tensor(
-            list(set(list(student_tokenizer.added_tokens_encoder.values()) + student_tokenizer.all_special_ids) 
-                 - set([student_tokenizer.eos_token_id])),
-            device=student_qry_input['input_ids'].device,
-            dtype=torch.long
-        )
-
         num_student_text_qry_tokens = count_clean_text_tokens(student_qry_input, student_special_ids)
         num_student_text_pos_tokens = count_clean_text_tokens(student_pos_input, student_special_ids)
 
@@ -511,7 +586,7 @@ class TalasJepa(nn.Module):
             student_hidden_states=student_qry_hidden_states, 
             image_features=student_qry_image_features,
             text_token_counts=num_student_text_qry_tokens, 
-            attention_mask=student_qry_input['attention_mask'], 
+            attention_mask=qry_mask, text_mask=qry_text_mask, image_mask=qry_image_mask,
         )
 
         # Trích xuất Representations từ POS
@@ -519,7 +594,7 @@ class TalasJepa(nn.Module):
             student_hidden_states=student_pos_hidden_states, 
             image_features=student_pos_image_features,
             text_token_counts=num_student_text_pos_tokens, 
-            attention_mask=student_pos_input['attention_mask'], 
+            attention_mask=pos_mask, text_mask=pos_text_mask, image_mask=pos_image_mask,
         )
 
         stu_modality_features = []
@@ -527,22 +602,30 @@ class TalasJepa(nn.Module):
         SIGReg = torch.zeros_like(contrastive_loss)
         num_sigreg_components = 0
 
-        if tea_text_qry_reps is not None:
-            stu_modality_features.append(qry_stu_txt)
-            tea_modality_features.append(tea_text_qry_reps)
-        if tea_text_pos_reps is not None:
-            stu_modality_features.append(pos_stu_txt)
-            tea_modality_features.append(tea_text_pos_reps)
+        qry_image_indices = (qry_image_mask.any(dim=1).nonzero(as_tuple=True)[0].tolist()
+                             if qry_image_mask is not None else
+                             [i for i, rep in enumerate(teacher_qry)
+                              if rep.get('mean_last_img_token') is not None])
+        pos_image_indices = (pos_image_mask.any(dim=1).nonzero(as_tuple=True)[0].tolist()
+                             if pos_image_mask is not None else
+                             [i for i, rep in enumerate(teacher_pos)
+                              if rep.get('mean_last_img_token') is not None])
+        for student_reps, caches, key, indices in [
+            (qry_stu_txt, teacher_qry, 'mean_last_text_token', range(batch_size)),
+            (pos_stu_txt, teacher_pos, 'mean_last_text_token', range(batch_size)),
+            (qry_stu_img, teacher_qry, 'mean_last_img_token', qry_image_indices),
+            (pos_stu_img, teacher_pos, 'mean_last_img_token', pos_image_indices),
+        ]:
+            student_reps, teacher_reps = matched_cached_modality(student_reps, caches, key, indices)
+            if student_reps is not None:
+                stu_modality_features.append(student_reps)
+                tea_modality_features.append(teacher_reps)
 
-        if tea_img_qry_reps is not None and qry_stu_img is not None:
-            stu_modality_features.append(qry_stu_img)
-            tea_modality_features.append(tea_img_qry_reps)
+        # CPR depends on student image tokens, including when cache modality means are absent.
+        if qry_stu_img is not None:
             SIGReg += qry_sigreg
             num_sigreg_components += 1
-
-        if tea_img_pos_reps is not None and pos_stu_img is not None:
-            stu_modality_features.append(pos_stu_img)
-            tea_modality_features.append(tea_img_pos_reps)
+        if pos_stu_img is not None:
             SIGReg += pos_sigreg
             num_sigreg_components += 1
 
