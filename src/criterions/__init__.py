@@ -34,6 +34,7 @@ from .emo_sigreg_kd_loss import EMOSigRegLoss
 from .em_sigreg_kd_loss import EMSigRegKDLoss
 from .span_attn_sigreg import SpanSigregCriterionWeighted
 
+from .ckd_cache_loss import CKDCacheLoss
 from .ablation_cred import AblationCred
 
 criterion_list = {
@@ -73,6 +74,8 @@ criterion_list = {
     "emo_sigreg_kd": EMOSigRegLoss,
     "em_sigreg_kd": EMSigRegKDLoss,
     "span_attn_sigreg_kd": SpanSigregCriterionWeighted,
+
+    "ckd_cache_loss": CKDCacheLoss,
 
     "ablation_cred": AblationCred,
 }

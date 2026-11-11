@@ -2,5 +2,9 @@
     "t2s":{
         "enabled": true,
         "structure": "t-s"
+    },
+    "s2t":{
+        "enabled": true,
+        "structure": "s-t"
     }
 }

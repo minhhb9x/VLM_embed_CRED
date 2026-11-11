@@ -15,4 +15,6 @@ CUDA_VISIBLE_DEVICES=0 bash scripts/cred_ablation/train_distill_sigreg_ret_VisDi
 
 CUDA_VISIBLE_DEVICES=1 bash scripts/cred_ablation/train_distill_sigreg_ret_CIRR.sh # train on subset of retrieval task
 
+CUDA_VISIBLE_DEVICES=0 bash scripts/cred_ablation/train_distill_sigreg_ret_CIRR.sh 1 1 1 0 1.0 0.5 256 0.02 # train on subset of retrieval task CPR w/o sigreg loss
+
 CUDA_VISIBLE_DEVICES=0 bash scripts/cred_ablation/train_single_old_ret_CIRR.sh # train on subset of retrieval task
