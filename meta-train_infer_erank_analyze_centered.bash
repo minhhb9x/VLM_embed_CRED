@@ -17,32 +17,34 @@ INFER_SUBSETS=(
 
 MODELS=(
     # "raghavlite/B3_Qwen2_2B"
-    # "apple/FastVLM-0.5B"
+    "apple/FastVLM-0.5B"
+    # training/FastVLM-0.5B_cls_talas_jepa_v2_d1_cse1_vis1_sig1_kd1.0_sw0.5_l256_dt0.02/checkpoint-epoch-0
     # training1/FastVLM-0.5B_base_b16_cls/checkpoint-epoch-0
     # "meta_train/rkd_meta_cls/checkpoint-epoch-0"
     # "meta_train/ckd_meta_cls/checkpoint-epoch-0"
     # "meta_train/norm_meta_cls/checkpoint-epoch-0"
     # meta_train/rebuttal_hierd_cls_5layers/checkpoint-epoch-0
-    "meta_train/sft_meta_llavaov_cls/checkpoint-epoch-0"
-    "meta_train/rkd_meta_llavaov_cls/checkpoint-epoch-0"
-    "meta_train/ckd_meta_llavaov_cls/checkpoint-epoch-0"
+    # "meta_train/sft_meta_llavaov_cls/checkpoint-epoch-0"
+    # "meta_train/rkd_meta_llavaov_cls/checkpoint-epoch-0"
+    # "meta_train/ckd_meta_llavaov_cls/checkpoint-epoch-0"
     # "meta_train/norm_meta_llavaov_cls/checkpoint-epoch-0"
-    "meta_train/span_propose_llava_ov_cls_v3_final/checkpoint-epoch-0"
+    # "meta_train/span_propose_llava_ov_cls_v3_final/checkpoint-epoch-0"
 )
 
 BACKBONES=(
     # "qwen2_vl"
+    "llava_qwen2_old"
+    # "llava_qwen2"
     # "llava_qwen2_old"
     # "llava_qwen2_old"
     # "llava_qwen2_old"
     # "llava_qwen2_old"
     # "llava_qwen2_old"
-    # "llava_qwen2_old"
-    "llava_onevision_old"
-    "llava_onevision_old"
-    "llava_onevision_old"
     # "llava_onevision_old"
-    "llava_onevision_old"
+    # "llava_onevision_old"
+    # "llava_onevision_old"
+    # "llava_onevision_old"
+    # "llava_onevision_old"
 )
 
 # Kiểm tra MODELS và BACKBONES có cùng số phần tử không
@@ -97,6 +99,8 @@ for i in "${!MODELS[@]}"; do
     for SUBSET in "${INFER_SUBSETS[@]}"; do
         PT_DIR="${INFER_OUTPUT}/${SUBSET}/query"
         ANALYZE_BASE="analyze/${EXP_NAME}${OUTPUT_SUFFIX}_${SUBSET}"
+
+        # Shannon eRank: uncentered.
         python "$SCRIPT_DIR/er_statistic.py" \
             --pt_dir "$PT_DIR" \
             --num_samples 0 \
@@ -104,13 +108,23 @@ for i in "${!MODELS[@]}"; do
             --normalize_by_min_dim \
             --output_file "${ANALYZE_BASE}_uncentered.txt"
 
+        # Shannon eRank: centered.
         python "$SCRIPT_DIR/er_statistic_centered.py" \
             --pt_dir "$PT_DIR" \
             --num_samples 0 \
             --device "$ER_DEVICE" \
             --normalize_by_min_dim \
             --output_file "${ANALYZE_BASE}_centered.txt"
+
+        # Exact PR: centered.
+        python "$SCRIPT_DIR/pr_statistic.py" \
+            --pt_dir "$PT_DIR" \
+            --num_samples 0 \
+            --device "$ER_DEVICE" \
+            --normalize_by_min_dim \
+            --output_file "${ANALYZE_BASE}_pr_centered.txt"
     done
+
     rm -rf "$INFER_OUTPUT"
     echo "Finished: ${EXP_NAME}${OUTPUT_SUFFIX}"
 done

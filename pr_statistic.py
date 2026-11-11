@@ -13,24 +13,28 @@ def compute_participation_ratio(
 ) -> torch.Tensor:
     x = hidden_state.float()
     n, d = x.shape
-    x = x - x.mean(dim=0, keepdim=True)  # center tokens, as in \widetilde H
+    if n < 2 or d == 0:
+        return x.new_zeros(())
+
+    # Cùng cách centering với er_statistic_centered.py.
+    x = x - x[:1]
+    x = x - x.mean(dim=0, keepdim=True)
 
     if use_trace:
-        # Exact computation via tr(Sigma) and tr(Sigma^2), Sigma = x^T x / (n - 1)
-        cov = (x.T @ x) / (n)          # D x D, O(n d^2)
+        cov = (x.T @ x) / (n - 1)
         t1 = torch.trace(cov)
-        t2 = torch.trace(cov @ cov).clamp_min(eps)
-        # equivalently: t2 = (cov * cov.T).sum() for symmetric cov, avoids full matmul
+        t2 = cov.square().sum()  # tr(cov²), vì cov đối xứng
     else:
-        # SVD-based, equivalent but avoids forming the D x D / N x N matrix explicitly
-        s = torch.linalg.svdvals(x) / torch.sqrt(torch.tensor(n - 1, device=x.device, dtype=x.dtype))
-        eigvals = s.square()
-        t1 = eigvals.sum()
-        t2 = eigvals.square().sum().clamp_min(eps)
+        eigenvalues = torch.linalg.svdvals(x).square() / (n - 1)
+        t1 = eigenvalues.sum()
+        t2 = eigenvalues.square().sum()
 
-    pr = t1.square() / t2
+    # Tránh ngưỡng eps tuyệt đối làm lệch PR khi covariance rất nhỏ.
+    tiny = torch.finfo(x.dtype).tiny
+    pr = t1.square() / t2.clamp_min(tiny)
+
     if normalize_by_min_dim:
-        pr = pr / min(n, d)
+        pr = pr / min(n - 1, d)
 
     return pr
 
@@ -219,7 +223,7 @@ def main():
     parser.add_argument(
         "--normalize_by_min_dim",
         action="store_true",
-        help="Divide participation ratio by min(n, d). If omitted, return raw participation ratio.",
+        help="Divide participation ratio by min(n-1, d). If omitted, return raw participation ratio.",
     )
     args = parser.parse_args()
     device = torch.device(args.device)
@@ -234,7 +238,7 @@ def main():
     pt_files = get_pt_files(pt_dir=args.pt_dir, num_samples=args.num_samples)
 
     print(f"Found {len(pt_files)} .pt files to process.")
-    print(f"Participation ratio normalization: {'min(n, d)' if args.normalize_by_min_dim else 'none'}")
+    print(f"Participation ratio normalization: {'min(n-1, d)' if args.normalize_by_min_dim else 'none'}")
     print("First files:")
     for pt_path in pt_files[:10]:
         print(f"  {os.path.basename(pt_path)}")
@@ -318,7 +322,7 @@ def main():
         f"Requested samples: {args.num_samples}",
         f"Loaded files: {len(loaded_files)}",
         f"L2-normalized image/text tokens: {args.normalize}",
-        f"Participation ratio normalization: {'min(n, d)' if args.normalize_by_min_dim else 'none'}",
+        f"Participation ratio normalization: {'min(n-1, d)' if args.normalize_by_min_dim else 'none'}",
         "File selection order: filename sort",
         f"Per-sample image participation ratio shape: {tuple(image_per_sample_eranks.shape)}",
         f"Per-sample text participation ratio shape: {tuple(text_per_sample_eranks.shape)}",
