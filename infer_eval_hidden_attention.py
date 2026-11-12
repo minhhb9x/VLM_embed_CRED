@@ -529,6 +529,7 @@ def infer_side(
 
             last_hidden_batch = hidden_states[-1].detach()
             has_eos_id = (model_inputs["input_ids"] == tokenizer.eos_token_id).any().item()
+            print(f"Batch {batch_idx}: last_hidden_batch.shape={last_hidden_batch.shape}, has_eos_id={has_eos_id}")
             for local_idx, sample_idx in enumerate(sample_indices.tolist()):
                 idx = int(sample_idx)
                 out_path = os.path.join(side_dir, f"{idx:08d}.pt")

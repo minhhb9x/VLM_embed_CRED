@@ -85,12 +85,8 @@ class CKDCacheLoss(nn.Module):
         # Project teacher to student embedding dimension
         # =====================================================
 
-        projected_student_qry_reps = projectors["s2t"](all_student_qry_reps)
-        projected_student_pos_reps = projectors["s2t"](all_student_pos_reps)
-
-
-        all_projected_student_qry_reps = self._dist_gather_tensor(projected_student_qry_reps)
-        all_projected_student_pos_reps = self._dist_gather_tensor(projected_student_pos_reps)
+        all_projected_student_qry_reps = projectors["s2t"](all_student_qry_reps)
+        all_projected_student_pos_reps = projectors["s2t"](all_student_pos_reps)
 
         # =====================================================
         # Comparative Knowledge Distillation
@@ -105,7 +101,10 @@ class CKDCacheLoss(nn.Module):
         student_ckd_reps = torch.cat([all_projected_student_qry_reps, all_projected_student_pos_reps], dim=0)
         teacher_ckd_reps = torch.cat([all_teacher_qry_reps, all_teacher_pos_reps], dim=0)
 
-        kd_loss = self.ckd_loss(student_ckd_reps, teacher_ckd_reps)
+        norm_student_ckd_reps = F.normalize(student_ckd_reps, p=2, dim=-1)
+        norm_teacher_ckd_reps = F.normalize(teacher_ckd_reps, p=2, dim=-1)
+
+        kd_loss = self.ckd_loss(norm_student_ckd_reps, norm_teacher_ckd_reps)
 
 
         loss = contrastive_loss + self.kd_loss_weight * kd_loss

@@ -78,21 +78,18 @@ def extract_text_tokens(obj: dict, hidden_state: torch.Tensor, image_slice: slic
     after_image = hidden_state[:, image_slice.stop:, :]
     text_hidden = torch.cat([before_image, after_image], dim=1)
 
-    num_text_tokens = int(obj.get("num_text_tokens", 0))
-    if num_text_tokens <= 0:
-        return text_hidden
+    num_text_tokens = int(obj["num_text_tokens"])
+    if text_hidden.size(1) != num_text_tokens:
+        raise ValueError(
+            f"Extracted {text_hidden.size(1)} text tokens, "
+            f"expected {num_text_tokens}."
+        )
 
-    if text_hidden.size(1) == num_text_tokens:
-        return text_hidden
+    # Chỉ đúng khi has_eos_id xác nhận EOS là token text cuối.
+    if obj.get("has_eos_id", False):
+        text_hidden = text_hidden[:, :-1, :]
 
-    has_eos_id = bool(obj.get("has_eos_id", False))
-    if has_eos_id and text_hidden.size(1) == num_text_tokens + 1:
-        return text_hidden[:, :num_text_tokens, :]
-
-    raise ValueError(
-        f"Extracted {text_hidden.size(1)} non-image tokens but num_text_tokens={num_text_tokens}. "
-        f"has_eos_id={has_eos_id}."
-    )
+    return text_hidden
 
 
 def load_hidden_layers(

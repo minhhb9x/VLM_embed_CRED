@@ -17,8 +17,8 @@ INFER_SUBSETS=(
 
 MODELS=(
     # "raghavlite/B3_Qwen2_2B"
-    "apple/FastVLM-0.5B"
-    # training/FastVLM-0.5B_cls_talas_jepa_v2_d1_cse1_vis1_sig1_kd1.0_sw0.5_l256_dt0.02/checkpoint-epoch-0
+    # "apple/FastVLM-0.5B"
+    training/FastVLM-0.5B_cls_talas_jepa_v2_d1_cse1_vis1_sig1_kd1.0_sw0.5_l256_dt0.02/checkpoint-epoch-0
     # training1/FastVLM-0.5B_base_b16_cls/checkpoint-epoch-0
     # "meta_train/rkd_meta_cls/checkpoint-epoch-0"
     # "meta_train/ckd_meta_cls/checkpoint-epoch-0"
@@ -33,8 +33,8 @@ MODELS=(
 
 BACKBONES=(
     # "qwen2_vl"
-    "llava_qwen2_old"
-    # "llava_qwen2"
+    # "llava_qwen2_old"
+    "llava_qwen2"
     # "llava_qwen2_old"
     # "llava_qwen2_old"
     # "llava_qwen2_old"
