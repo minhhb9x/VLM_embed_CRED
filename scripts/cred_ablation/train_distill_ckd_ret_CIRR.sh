@@ -8,6 +8,8 @@ TRAIN_SCRIPT="train_ddp.py"
 
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
 
+export KD_WEIGHT=0.5
+
 # =========================================================================
 # Dùng torchrun để khởi chạy
 # =========================================================================
@@ -27,7 +29,7 @@ torchrun --standalone \
     --dataset_split "original" \
     --image_dir "vlm2vec_train/MMEB-train" \
     --percent_data 1.0 \
-    --output_dir "training/FastVLM-0.5B_ckd_ret_CIRR" \
+    --output_dir "training/FastVLM-0.5B_ckd_ret_CIRR_kd${KD_WEIGHT}" \
     --per_device_train_batch_size 16 \
     --gradient_accumulation_steps 1 \
     --learning_rate 1e-4 \
@@ -43,7 +45,7 @@ torchrun --standalone \
     --lr_scheduler_type "constant" \
     --warmup_ratio 0.05 \
     --caching_dir caching/B3_Qwen2_2B_ret \
-    --kd_weight 0.3 \
+    --kd_weight $KD_WEIGHT \
     --kd_loss_type "ckd_cache_loss" \
     --image_resolution "low" \
     --projector_config_path "./config/projector_config_emo.json" \
@@ -58,8 +60,8 @@ EVAL_SUBSETS=(
 
 
 python eval_mmeb.py \
-  --model_name "training/FastVLM-0.5B_ckd_ret_CIRR/checkpoint-epoch-0" \
-  --encode_output_path "./MMEB-eval_outputs/FastVLM-0.5B_ckd_ret_CIRR" \
+  --model_name "training/FastVLM-0.5B_ckd_ret_CIRR_kd${KD_WEIGHT}/checkpoint-epoch-0" \
+  --encode_output_path "./MMEB-eval_outputs/FastVLM-0.5B_ckd_ret_CIRR_kd${KD_WEIGHT}" \
   --lora True \
   --lora_r 64 \
   --lora_alpha 64 \

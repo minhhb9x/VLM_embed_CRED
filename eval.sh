@@ -3,7 +3,8 @@ SUBSETS=(
   # "Place365" "ImageNet-A" "ImageNet-R" "ObjectNet" "Country211"
   # "OK-VQA" "A-OKVQA" "DocVQA" "InfographicsVQA" "ChartQA" "Visual7W"
   # "ScienceQA" "VizWiz" "GQA" "TextVQA"
-  VisDial CIRR
+  # VisDial 
+  CIRR
   OVEN FashionIQ EDIS Wiki-SS-NQ
 )
 
@@ -23,7 +24,7 @@ CUDA_VISIBLE_DEVICES=0 python eval_mmeb.py \
     --dataset_name TIGER-Lab/MMEB-eval \
     --subset_name "${SUBSETS[@]}" \
     --dataset_split test \
-    --per_device_eval_batch_size 8 \
+    --per_device_eval_batch_size 1 \
     --image_dir eval_images/ \
     --tgt_prefix_mod \
     --load_pretrained_lora True \
